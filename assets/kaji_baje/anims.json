@@ -1,0 +1,20 @@
+{
+ "idle": {
+  "frames": 25,
+  "size": 256,
+  "fps": 10,
+  "ground": 248
+ },
+ "walk": {
+  "frames": 10,
+  "size": 256,
+  "fps": 11,
+  "ground": 248
+ },
+ "run": {
+  "frames": 25,
+  "size": 256,
+  "fps": 24,
+  "ground": 248
+ }
+}
