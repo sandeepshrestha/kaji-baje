@@ -1,0 +1,12 @@
+{
+  "note": "Files fetched from UI8 products with the UI8 MCP library tools, for this project under the UI8 license.",
+  "sources": [
+    {
+      "product": { "id": "66728f11a0970b0033d9c5e1", "name": "Numaposa", "url": "https://ui8.net/indotype/products/numaposa" },
+      "file": { "index": 0, "name": "CF Numaposa.zip" },
+      "fetched_at": "2026-11-05T07:56:53.891Z",
+      "include": ["TTF/CFNumaposa-Regular.ttf", "Readme.txt"],
+      "flatten": true
+    }
+  ]
+}

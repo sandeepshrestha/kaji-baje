@@ -1,0 +1,16 @@
+{
+  "note": "Files fetched from UI8 products with the UI8 MCP library tools, for this project under the UI8 license.",
+  "sources": [
+    {
+      "product": {
+        "id": "692e3ab553f8160033b0fee7",
+        "name": "3D Cute Character Animals (20) x 5 Angles",
+        "url": "https://ui8.net/digcy/products/3d-cute-character-animals"
+      },
+      "file": { "index": 0, "name": "3D Cute Animals.zip" },
+      "fetched_at": "2026-11-05T07:56:52.098Z",
+      "include": ["Characters/Bat/*", "Characters/Hedgehog/*", "Characters/Monkey/*", "Characters/Red Panda/*"],
+      "flatten": false
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "note": "Files fetched from UI8 products with the UI8 MCP library tools, for this project under the UI8 license.",
+  "sources": [
+    {
+      "product": { "id": "5e4fca5a3dcd78003865bfe9", "name": "250 Game Development Icons", "url": "https://ui8.net/juicy-fish/products/250-game-development-icons" },
+      "file": { "index": 0, "name": "11 - Game Development.zip" },
+      "fetched_at": "2026-11-05T07:56:55.507Z",
+      "include": ["*/Flat/PNGs/033 - Heart Element_128.png", "*/Flat/PNGs/032 - Award Element_128.png", "*/Flat/PNGs/021 - Star Element_128.png"],
+      "flatten": true
+    }
+  ]
+}

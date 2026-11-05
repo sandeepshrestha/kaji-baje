@@ -1,8 +1,12 @@
 extends CharacterBody3D
-## Kaji Baje: a billboarded AnimatedSprite3D on a capsule body. Movement is on
-## the ground plane relative to the camera. Idle when still, walk when moving,
+## Kaji Baje: a billboarded AnimatedSprite3D on a capsule body. He runs along
+## one street (the X axis) and jumps. Idle when still, walk when moving,
 ## run while Shift is held; sprites are mirrored when heading left.
 ## Space jumps; pressing it again in the air does one double jump.
+## J sweeps the cane. The hit is live on the two frames where it is in front.
+## K brings it down overhead with both hands: slow lift, fast strike, hit on impact.
+
+const LANE_Z := 0.0
 
 const WALK_SPEED := 2.4
 const SPRINT_SPEED := 6.0
@@ -25,6 +29,12 @@ const WALK_CANE_FRAME := 3
 const RUN_STEP_INTERVAL := 0.25
 const AIR_RISE_FRAME := 2             # run frames with the widest stride, held mid-air
 const AIR_FALL_FRAME := 15
+const SWEEP_WHIP_FRAME := 2           # cane comes over the top
+const SWEEP_HIT_FRAMES := [3, 4]      # cane is low and in front on these sweep frames
+const CRACK_WHIP_FRAME := 4           # the gold arc on the way down
+const CRACK_HIT_FRAMES := [5]         # cane tip on the ground in front
+const CRACK_COMMIT_FRAMES := 7        # no jumping before he starts to rise
+const CRACK_SPEED := 0.15
 
 var sprite: AnimatedSprite3D
 var _blob: MeshInstance3D
@@ -45,11 +55,21 @@ var _last_speed := 0.0
 var _rng := RandomNumberGenerator.new()
 var sound_counts := {}   # name prefix -> times played (handy for checks)
 var facing_left := false
+var _attack := ""   # "", "sweep" or "crack": the animation that is playing out
+var _swing_buffer := 0.0
+var _crack_buffer := 0.0
+var _attack_hits := {}
+var swings := 0
+var cracks := 0
+var _breathing := false
+var _breathe_pending := false
+var _hurting := false
 var aim_dir := Vector3.ZERO   # stick direction, used by the camera lead
 var cpu_controlled := false
 var cpu_move := Vector2.ZERO
 var cpu_sprint := false
 var cpu_jump := false
+var spawn_point := Vector3(0, 0.6, 0)
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
 const MAX_HEALTH := 3
@@ -75,12 +95,17 @@ func _ready() -> void:
 		var tex: Texture2D = load("res://assets/kaji_baje/%s.png" % name)
 		frames.add_animation(name)
 		frames.set_animation_speed(name, float(m.fps))
-		frames.set_animation_loop(name, true)
+		frames.set_animation_loop(name, bool(m.get("loop", true)))
+		var durations: Array = m.get("durations", [])
+		# Frames are drawn centred, so a taller cell must keep its ground the
+		# same distance below centre as idle's.
+		var cell_w := float(m.size)
+		var cell_h := float(m.get("height", m.size))
 		for i in int(m.frames):
 			var at := AtlasTexture.new()
 			at.atlas = tex
-			at.region = Rect2(i * m.size, 0, m.size, m.size)
-			frames.add_frame(name, at)
+			at.region = Rect2(i * cell_w, 0, cell_w, cell_h)
+			frames.add_frame(name, at, float(durations[i]) if i < durations.size() else 1.0)
 	sprite.sprite_frames = frames
 	var cell: float = meta.idle.size
 	var ground: float = meta.idle.ground
@@ -116,6 +141,7 @@ func _ready() -> void:
 	add_child(fill)
 	_setup_audio()
 	sprite.frame_changed.connect(_on_frame)
+	sprite.animation_finished.connect(_on_anim_finished)
 
 func _setup_audio() -> void:
 	for n in ["step_1", "step_2", "step_3", "step_4", "step_run_1", "step_run_2", "step_run_3", "step_run_4",
@@ -147,19 +173,38 @@ func _on_frame() -> void:
 			_sound("step_%d" % _rng.randi_range(1, 4), -8.0)
 		elif sprite.frame == WALK_CANE_FRAME:
 			_sound("cane_%d" % _rng.randi_range(1, 3), -11.0, 0.05)
+	elif sprite.animation == "sweep":
+		if sprite.frame == SWEEP_WHIP_FRAME:
+			_sound("whoosh", -8.0, 0.07)
+		elif sprite.frame == SWEEP_HIT_FRAMES[0]:
+			_sound("cane_2", -8.0, 0.04)
+	elif sprite.animation == "crack":
+		if sprite.frame == CRACK_WHIP_FRAME:
+			_sound("whoosh", -6.0, 0.05)
+		elif sprite.frame == CRACK_HIT_FRAMES[0]:
+			_sound("thud", -4.0, 0.05)
+			_sound("land", -8.0, 0.06)
+			_squash = Vector2(1.12, 0.88)
+
+func _on_anim_finished() -> void:
+	if sprite.animation == "hurt":
+		_hurting = false
+	elif sprite.animation == "breathe":
+		_breathing = false
+	elif sprite.animation == "crack":
+		_attack = ""
+		_breathe_pending = true
+	elif sprite.animation == _attack:
+		_attack = ""
 
 func _input_dir() -> Vector2:
 	if cpu_controlled:
 		var steered := cpu_move
 		return steered.normalized() if steered.length() > 1.0 else steered
 	var x := 0.0
-	var y := 0.0
 	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT): x -= 1.0
 	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT): x += 1.0
-	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP): y -= 1.0
-	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN): y += 1.0
-	var v := Vector2(x, y)
-	return v.normalized() if v.length() > 1.0 else v
+	return Vector2(x, 0.0)
 
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.physical_keycode == KEY_SPACE and not e.echo:
@@ -167,21 +212,27 @@ func _unhandled_input(e: InputEvent) -> void:
 			_jump_buffer = JUMP_BUFFER
 		elif velocity.y > 0.0:
 			velocity.y *= JUMP_CUT
+	elif e is InputEventKey and e.physical_keycode == KEY_J and e.pressed and not e.echo:
+		_swing_buffer = 0.16
+	elif e is InputEventKey and e.physical_keycode == KEY_K and e.pressed and not e.echo:
+		_crack_buffer = 0.16
 
 func _physics_process(delta: float) -> void:
 	var inp := _input_dir()
-	aim_dir = Vector3(inp.x, 0.0, inp.y)
+	aim_dir = Vector3(inp.x, 0.0, 0.0)
 	var sprint := cpu_sprint if cpu_controlled else Input.is_physical_key_pressed(KEY_SHIFT)
 	var speed := SPRINT_SPEED if sprint else WALK_SPEED
+	if _attack == "sweep":
+		speed *= 0.35
+	elif _attack == "crack":
+		speed *= CRACK_SPEED
 	var on_floor := is_on_floor()
-	# Camera looks down -Z, so screen up = -Z and screen right = +X.
-	var target := Vector3(inp.x, 0, inp.y) * speed
+	var target := Vector3(inp.x, 0, 0) * speed
 	if _knock_time > 0.0:
 		_knock_time = maxf(_knock_time - delta, 0.0)
 	var steer := 0.2 if _knock_time > 0.0 else 1.0
-	var hv := Vector3(velocity.x, 0, velocity.z).move_toward(target, (ACCEL if on_floor else AIR_ACCEL) * delta * steer)
-	velocity.x = hv.x
-	velocity.z = hv.z
+	velocity.x = move_toward(velocity.x, target.x, (ACCEL if on_floor else AIR_ACCEL) * delta * steer)
+	velocity.z = 0.0
 	# Keep an upward shove (a jump, or a bump from a cube) even if the floor check is still true.
 	if on_floor and velocity.y <= 0.0:
 		velocity.y = 0.0
@@ -197,11 +248,24 @@ func _physics_process(delta: float) -> void:
 		_jump_buffer = JUMP_BUFFER
 		cpu_jump = false
 	_jump_buffer = maxf(_jump_buffer - delta, 0.0)
-	if _jump_buffer > 0.0:
+	var committed := _attack == "crack" and sprite.frame < CRACK_COMMIT_FRAMES
+	if _jump_buffer > 0.0 and not committed:
 		_try_jump()
 	var fall_speed := -velocity.y
 	move_and_slide()
+	global_position.z = LANE_Z
 	_stomp_monsters(fall_speed)
+	_swing_buffer = maxf(_swing_buffer - delta, 0.0)
+	_crack_buffer = maxf(_crack_buffer - delta, 0.0)
+	var can_attack := _attack == "" and not _hurting and health > 0 and _knock_time <= 0.0
+	if can_attack and _crack_buffer > 0.0 and is_on_floor():
+		_crack_buffer = 0.0
+		_begin_attack("crack")
+	elif can_attack and _swing_buffer > 0.0:
+		_swing_buffer = 0.0
+		_begin_attack("sweep")
+	elif _attack != "":
+		_attack_check()
 	if is_on_floor() and not _was_on_floor and fall_speed > 2.0:
 		_land(fall_speed)
 	_was_on_floor = is_on_floor()
@@ -226,11 +290,55 @@ func _stomp_monsters(fall_speed: float) -> void:
 		velocity.y = maxf(velocity.y, 4.2)
 		_squash = Vector2(1.16, 0.82)
 
+func _begin_attack(kind: String) -> void:
+	_attack = kind
+	_attack_hits.clear()
+	_breathing = false
+	_breathe_pending = false
+	_hurting = false
+	if kind == "sweep":
+		swings += 1
+		_squash = Vector2(1.08, 0.92)
+	else:
+		cracks += 1
+	sprite.speed_scale = 1.0
+	sprite.play(kind)
+
+func _attack_check() -> void:
+	var sweep := _attack == "sweep"
+	if sprite.animation != _attack or not (sprite.frame in (SWEEP_HIT_FRAMES if sweep else CRACK_HIT_FRAMES)):
+		return
+	# Sweep: low arc right in front. Crack: lands a little further out, and reaches up onto a low block.
+	var near := 0.1 if sweep else 0.3
+	var far := 1.25 if sweep else 1.4
+	var dir := -1.0 if facing_left else 1.0
+	for node in get_tree().get_nodes_in_group("monster"):
+		if not is_instance_valid(node) or not node.get("alive"):
+			continue
+		var id := node.get_instance_id()
+		if _attack_hits.has(id):
+			continue
+		var critter := node as Node3D
+		var rel := critter.global_position - global_position
+		var dx := rel.x * dir
+		if dx < near or dx > far or absf(rel.y) > 1.2 or absf(rel.z) > 0.8:
+			continue
+		_attack_hits[id] = true
+		if sweep:
+			node.call("strike", dir)
+			_sound("thud", -6.0, 0.05)
+		else:
+			node.call("stomp")
+
 func hurt(from: Vector3) -> void:
 	if _invuln > 0.0 or health <= 0:
 		return
 	health -= 1
 	health_changed.emit(health)
+	_attack = ""
+	_breathing = false
+	_breathe_pending = false
+	_hurting = false
 	_invuln = 1.05
 	_knock_time = 0.35
 	var away := global_position - from
@@ -238,15 +346,23 @@ func hurt(from: Vector3) -> void:
 	if away.length() < 0.01:
 		away = Vector3.FORWARD
 	away = away.normalized()
-	velocity = away * 7.0 + Vector3.UP * 3.2
+	away.z = 0.0
+	if absf(away.x) < 0.01:
+		away.x = 1.0 if global_position.x >= from.x else -1.0
+	velocity = away.normalized() * 7.0 + Vector3.UP * 3.2
 	_sound("hit", -5.0, 0.05)
 	if health <= 0:
 		_respawn()
+		return
+	_hurting = true
+	sprite.speed_scale = 1.0
+	sprite.play("hurt")
 
 func _respawn() -> void:
-	global_position = Vector3(0, 0.6, 0)
+	global_position = spawn_point
 	velocity = Vector3.ZERO
 	_knock_time = 0.0
+	_hurting = false
 	health = MAX_HEALTH
 	_invuln = 1.4
 	health_changed.emit(health)
@@ -339,23 +455,38 @@ func _movement_sounds(delta: float, inp: Vector2, sprint: bool) -> void:
 
 func _animate(inp: Vector2, sprint: bool) -> void:
 	var moving := inp.length() > 0.1 and Vector2(velocity.x, velocity.z).length() > 0.3
-	if inp.x < -0.1:
-		facing_left = true
-	elif inp.x > 0.1:
-		facing_left = false
+	if _attack == "" and not _hurting:
+		if inp.x < -0.1:
+			facing_left = true
+		elif inp.x > 0.1:
+			facing_left = false
 	sprite.flip_h = facing_left
+	if _attack != "" or _hurting:
+		return
+	var airborne := not is_on_floor() and _air_time > 0.08
+	if moving or airborne:
+		_breathing = false
+		_breathe_pending = false
 	# The short grace period stops a flicker when stepping off small ledges.
-	if not is_on_floor() and _air_time > 0.08:
+	if airborne:
 		if sprite.animation != "run":
 			sprite.play("run")
 		sprite.pause()
 		sprite.frame = AIR_RISE_FRAME if velocity.y > 0.0 else AIR_FALL_FRAME
-	elif not moving:
-		_play("idle", 1.0)
-	elif sprint:
-		_play("run", 1.0)
+	elif moving:
+		if sprint:
+			_play("run", 1.0)
+		else:
+			_play("walk", 1.0)
+	elif _breathe_pending:
+		_breathe_pending = false
+		_breathing = true
+		sprite.speed_scale = 1.0
+		sprite.play("breathe")
+	elif _breathing:
+		pass
 	else:
-		_play("walk", 1.0)
+		_play("idle", 1.0)
 
 func _play(anim: String, spd: float) -> void:
 	sprite.speed_scale = spd

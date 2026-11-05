@@ -81,11 +81,11 @@ def thud():
     return norm(x, 0.6)
 
 
-# C major pentatonic. Kept major on purpose: the old bed was minor-night
-# ambience (crickets, wind, owl, mains hum) and read as creepy.
+# Sa = C. A mangal-dhun phrase uses the full bilawal scale, not a pentatonic pluck.
 NOTES = {
-    "C5": 523.25, "D5": 587.33, "E5": 659.25, "G5": 783.99,
-    "A5": 880.00, "C6": 1046.50,
+    "C3": 130.81, "G3": 196.00,
+    "C4": 261.63, "D4": 293.66, "E4": 329.63, "F4": 349.23,
+    "G4": 392.00, "A4": 440.00, "B4": 493.88, "C5": 523.25,
 }
 
 
@@ -105,48 +105,107 @@ def _pluck(freq, n, decay=0.995, seed=1):
     return out
 
 
+def _bansuri(freq, n, grace=None, seed=1):
+    """Breathy flute: a short meend into the note, then a slow vibrato."""
+    x = np.arange(n) / SR
+    vib = 1.0 + 0.011 * np.sin(2 * np.pi * 5.1 * x) * np.clip(x / 0.16, 0, 1)
+    f = np.full(n, freq) * vib
+    if grace:
+        g = min(int(0.07 * SR), max(2, n // 3))
+        f[:g] = np.linspace(grace, freq, g)
+    phase = 2 * np.pi * np.cumsum(f) / SR
+    breath = band(np.random.default_rng(seed).uniform(-1, 1, n), 700, 4200)
+    tone = np.sin(phase) + 0.2 * np.sin(2 * phase) + 0.05 * np.sin(3 * phase) + 0.07 * breath
+    att = np.clip(x / 0.035, 0, 1)
+    rel = np.clip((n / SR - x) / 0.14, 0, 1)
+    return tone * att * rel
+
+
+def _madal(low, n, seed):
+    """Madal hit. The low head is the deep dha; the high head is the tin."""
+    r = np.random.default_rng(seed)
+    x = np.arange(n) / SR
+    if low:
+        f = 96 * (1 - 0.4 * np.clip(x / 0.07, 0, 1))
+        body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-x / 0.11)
+        slap = band(r.uniform(-1, 1, n), 160, 800) * np.exp(-x / 0.018)
+        return body * 0.9 + slap * 0.5
+    f = 286 * (1 - 0.25 * np.clip(x / 0.035, 0, 1))
+    body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-x / 0.04)
+    tick = band(r.uniform(-1, 1, n), 900, 4500) * np.exp(-x / 0.007)
+    return body * 0.45 + tick * 0.4
+
+
 def tune():
-    """Four-bar bouncing loop at 120 bpm. The last beat is empty so the join is silent."""
-    eighth = 0.25
-    bars = [
-        ["C5", "E5", "G5", "E5", "A5", "G5", "E5", "D5"],
-        ["C5", "E5", "G5", "C6", "A5", "G5", "E5", "C5"],
-        ["E5", "G5", "A5", "G5", "E5", "D5", "E5", "G5"],
-        ["A5", "G5", "E5", "D5", "C5", None, None, None],
+    """Mangal-dhun loop. Bansuri over a madal in a swaying six, with a Sa-Pa drone.
+
+    The line is original: it opens on Pa, climbs to the upper Sa, and resolves
+    back to Sa the way an auspicious dhun does. Eighth = 0.30 s, eight bars of six.
+    """
+    eighth = 0.30
+    steps = 48
+    n = int(steps * eighth * SR)
+    out = np.zeros(n)
+    k_sa = int(round(NOTES["C3"] * n / SR))
+    k_pa = int(round(NOTES["G3"] * n / SR))
+    i = np.arange(n)
+    drone = 0.16 * np.sin(2 * np.pi * k_sa * i / n) + 0.10 * np.sin(2 * np.pi * k_pa * i / n)
+    out += drone
+    # start eighth, length in eighths, note, grace
+    phrase = [
+        (0, 1, "G4", "F4"), (1, 1, "G4", None), (2, 1, "A4", "G4"),
+        (3, 1, "B4", "A4"), (4, 2, "C5", "B4"),
+        (6, 1, "B4", None), (7, 1, "A4", "B4"), (8, 1, "G4", None),
+        (9, 1, "F4", "G4"), (10, 1, "E4", None), (11, 1, "D4", "E4"),
+        (12, 1, "E4", "D4"), (13, 1, "F4", None), (14, 1, "G4", "F4"),
+        (15, 2, "A4", "G4"), (17, 1, "G4", None), (18, 1, "E4", "F4"),
+        (19, 1, "D4", None), (20, 1, "E4", "D4"), (21, 1, "D4", "E4"),
+        (22, 2, "C4", "D4"),
+        (24, 1, "C4", None), (25, 1, "D4", "C4"), (26, 1, "E4", None),
+        (27, 1, "G4", "E4"), (28, 2, "A4", "G4"), (30, 1, "G4", None),
+        (31, 1, "E4", "G4"), (32, 1, "D4", None), (33, 1, "C4", "D4"),
+        (34, 1, "D4", "C4"), (35, 1, "E4", None), (36, 2, "G4", "E4"),
+        (38, 1, "A4", "G4"), (39, 1, "G4", None), (40, 1, "E4", "G4"),
+        (41, 1, "D4", None), (42, 1, "C4", "D4"), (43, 1, "D4", "E4"),
+        (44, 1, "E4", "D4"), (45, 1, "D4", None), (46, 2, "C4", "D4"),
     ]
-    steps = 4 * 8
-    out = np.zeros(int(steps * eighth * SR))
-    for i, note in enumerate(n for bar in bars for n in bar):
-        start = int(i * eighth * SR)
-        if note is None:
+    for i_note, (start_e, length, name, grace) in enumerate(phrase):
+        start = int(start_e * eighth * SR)
+        dur = int((length * eighth + 0.16) * SR)
+        end = min(n, start + dur)
+        grace_f = NOTES[grace] if grace else None
+        tone = _bansuri(NOTES[name], end - start, grace_f, seed=40 + i_note)
+        out[start:end] += tone * 0.72
+    # Madal theka, six eighths to the bar: dha, tin, tin, dha, tin, tin.
+    hit_n = int(0.28 * SR)
+    for e in range(steps):
+        if e >= steps - 1:
             continue
-        ring = int(0.42 * SR)
-        end = min(len(out), start + ring)
-        out[start:end] += _pluck(NOTES[note], end - start, seed=20 + i) * 0.85
-        if i % 2 == 0:
-            # Soft wood tap on the eighth-note off the melody, for bounce.
-            tap_n = int(0.05 * SR)
-            x = np.arange(tap_n) / SR
-            tap = np.sin(2 * np.pi * 990 * x) * np.exp(-x / 0.008)
-            te = min(len(out), start + tap_n)
-            out[start:te] += tap[: te - start] * 0.22
-    fade = int(0.008 * SR)
+        low = e % 6 in (0, 3)
+        start = int(e * eighth * SR)
+        end = min(n, start + hit_n)
+        hit = _madal(low, end - start, seed=80 + e)
+        out[start:end] += hit * (0.42 if low else 0.22)
+    fade = int(0.012 * SR)
     out[:fade] *= np.linspace(0, 1, fade)
     out[-fade:] *= np.linspace(1, 0, fade)
-    return norm(out, 0.55)
+    return norm(out, 0.5)
 
 
 def whistle():
-    """Short upward two-note call, the cheerful stand-in for the owl."""
-    out = np.zeros(int(0.75 * SR))
-    for start, dur, f0, f1 in ((0.02, 0.20, 784.0, 1046.0), (0.28, 0.26, 1174.0, 1568.0)):
+    """A short bansuri turn, Pa up to Sa, instead of the old bird call."""
+    out = np.zeros(int(0.9 * SR))
+    for start, dur, f0, f1 in ((0.04, 0.34, 392.0, 523.25), (0.42, 0.40, 523.25, 392.0)):
         x = t(dur)
-        f = f0 + (f1 - f0) * (x / dur)
-        phase = 2 * np.pi * np.cumsum(f) / SR
-        e = np.sin(np.pi * np.clip(x / dur, 0, 1)) ** 0.7
+        slide = 0.55 * (1 - np.exp(-x / 0.08))
+        f = f0 + (f1 - f0) * slide
+        vib = 1.0 + 0.01 * np.sin(2 * np.pi * 5.0 * x) * np.clip(x / 0.12, 0, 1)
+        phase = 2 * np.pi * np.cumsum(f * vib) / SR
+        e = np.sin(np.pi * np.clip(x / dur, 0, 1)) ** 0.8
+        breath = band(np.random.default_rng(7).uniform(-1, 1, len(x)), 700, 4000)
         s = int(start * SR)
-        out[s:s + len(x)] += np.sin(phase) * e
-    return norm(out, 0.45)
+        out[s:s + len(x)] += (np.sin(phase) + 0.18 * np.sin(2 * phase) + 0.05 * breath) * e
+    return norm(out, 0.4)
 
 
 def lamp_glow():

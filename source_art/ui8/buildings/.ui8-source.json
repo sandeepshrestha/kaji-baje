@@ -1,0 +1,16 @@
+{
+  "note": "Files fetched from UI8 products with the UI8 MCP library tools, for this project under the UI8 license.",
+  "sources": [
+    {
+      "product": {
+        "id": "63edd2092c6fb4003d10266d",
+        "name": "3D Building and Landmarks Illustration",
+        "url": "https://ui8.net/slabdsgn/products/3d-building-and-landmarks-illustration"
+      },
+      "file": { "index": 0, "name": "Source.zip" },
+      "fetched_at": "2026-11-05T07:56:49.545Z",
+      "include": ["*/1. house.blend", "*/19.house.blend", "*/5. bakery.blend", "*/12. coffee shop.blend", "*/18.barbershop.blend", "*/13. restaurant.blend", "*/2. post office.blend", "*/22.temple.blend", "*/25.library.blend", "*/6. hotel.blend", "*/1. house.png", "*/22.temple.png"],
+      "flatten": true
+    }
+  ]
+}

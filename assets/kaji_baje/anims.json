@@ -5,6 +5,13 @@
   "fps": 10,
   "ground": 248
  },
+ "breathe": {
+  "frames": 6,
+  "size": 256,
+  "fps": 6,
+  "ground": 248,
+  "loop": false
+ },
  "walk": {
   "frames": 10,
   "size": 256,
@@ -16,5 +23,32 @@
   "size": 256,
   "fps": 24,
   "ground": 248
+ },
+ "sweep": {
+  "frames": 7,
+  "size": 416,
+  "height": 288,
+  "fps": 20,
+  "ground": 264,
+  "loop": false,
+  "durations": [1.2, 2.4, 0.8, 1.2, 1.4, 1.8, 1.8]
+ },
+ "crack": {
+  "frames": 9,
+  "size": 288,
+  "height": 384,
+  "fps": 20,
+  "ground": 248,
+  "loop": false,
+  "durations": [2.0, 2.2, 2.4, 4.0, 0.8, 2.2, 1.6, 1.8, 1.8]
+ },
+ "hurt": {
+  "frames": 3,
+  "size": 320,
+  "height": 256,
+  "fps": 8,
+  "ground": 248,
+  "loop": false,
+  "durations": [1.2, 1.6, 1.4]
  }
 }
